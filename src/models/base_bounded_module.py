@@ -114,6 +114,8 @@ class BaseBoundedModulePL(LightningModule):
             self.__setattr__(f"val_cert_acc_{eps_t:.4f}", MeanMetric())
             self.__setattr__(f"test_cert_acc_{eps_t:.4f}", MeanMetric())
 
+        self.test_outputs = []
+
     def _init_bounded_module(self, input_shape=None):
         input_shape = self.hparams.input_shape if input_shape is None else input_shape
         dummy_input = torch.rand(
@@ -379,7 +381,7 @@ class BaseBoundedModulePL(LightningModule):
         loss_tightness, loss_std, loss_relu, loss_ratio = (l0.clone() for i in range(4))
 
         modules = self.bounded_net._modules
-        node_inp = modules["/input.1"]
+        node_inp = modules["/input-1"]
         tightness_0 = ((node_inp.upper - node_inp.lower) / 2).mean()
         # ratio_init = tightness_0 / ((node_inp.upper + node_inp.lower) / 2).std()
         # cnt_layers = 0
@@ -457,7 +459,7 @@ class BaseBoundedModulePL(LightningModule):
     def validation_step(self, batch: Any, batch_idx: int):
         pass
 
-    def validation_epoch_end(self, outputs: List[Any]):
+    def on_validation_epoch_end(self):
         pass
 
     def test_step(self, batch: Any, batch_idx: int):
@@ -500,13 +502,17 @@ class BaseBoundedModulePL(LightningModule):
                 self.__getattr__(f"test_cert_acc_{eps_t:.4f}"),
                 **log_kwargs,
             )
+        
+        self.test_outputs.append({"eps": eps.detach()})
 
         return {"eps": eps.detach()}
 
-    def test_epoch_end(self, outputs: List[Any]):
+    def on_test_epoch_end(self):
         eps_all = np.array([])
-        for output in outputs:
-            eps_all = np.concatenate((eps_all, output["eps"].cpu().numpy()))
+        for output in self.test_outputs:
+          eps_all = np.concatenate((eps_all, output["eps"].cpu().numpy()))
+        
+        self.test_outputs = []
         dir = os.path.join(self.trainer._default_root_dir, "figures", "test")
         epoch = self.trainer.current_epoch
         file_name = f"eps_test_{epoch:05}.npy"
@@ -674,3 +680,35 @@ class BaseBoundedModulePL(LightningModule):
             self._kaiming_init()
         else:
             raise ValueError(init_method)
+    
+    def adaptive_label_smooth(self, labels, epsilon, c=1.0):
+        """
+        Apply adaptive label smoothing based on epsilon values (CAT paper Eq. 4).
+        
+        Args:
+            labels: class indices [batch_size]
+            epsilon: per-sample epsilon values [batch_size]
+            c: weighting hyperparameter
+        
+        Returns:
+            smoothed_labels: [batch_size, num_classes]
+        """
+        import torch.distributions as dist
+        
+        batch_size = labels.shape[0]
+        device = labels.device
+        
+        # Convert to one-hot
+        y_onehot = F.one_hot(labels, num_classes=self.hparams.num_classes).float()
+        
+        # Create Dirichlet distribution samples
+        dirichlet = dist.Dirichlet(torch.ones(self.hparams.num_classes).to(device))
+        random_labels = dirichlet.sample((batch_size,))
+        
+        # Compute smoothing factor: alpha = c * epsilon
+        alpha = (c * epsilon / self.hparams.max_eps).unsqueeze(1)  # normalize epsilon
+        
+        # Apply: ỹ = (1 - α)y + α·Dirichlet(1)
+        smoothed_labels = (1 - alpha) * y_onehot + alpha * random_labels
+        
+        return smoothed_labels

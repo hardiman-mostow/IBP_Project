@@ -7,7 +7,7 @@ import hydra
 import pyrootutils
 from omegaconf import DictConfig
 from pytorch_lightning import LightningDataModule, LightningModule, Trainer
-from pytorch_lightning.loggers import LightningLoggerBase
+from pytorch_lightning.loggers import Logger as LightningLoggerBase
 
 root = pyrootutils.setup_root(
     search_from=__file__,

@@ -4,6 +4,8 @@ net:
   _target_: src.models.components.dm_models.cnn
   input_ch: 1
   input_dim: 28
+  width: 16
+  linear_size: 128
 
 # Params for computing bounds in BoundedModule
 input_shape: [1, 28, 28]

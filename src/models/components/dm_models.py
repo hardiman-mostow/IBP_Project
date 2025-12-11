@@ -35,8 +35,8 @@ def cnn_7layer_bn2(input_ch=3, input_dim=32, width=64, linear_size=512, output_s
     return model
 
 
-def cnn(input_ch=3, input_dim=32):
-    return cnn_7layer_bn2(input_ch, input_dim)
+def cnn(input_ch=3, input_dim=32, width=64, linear_size=512):
+    return cnn_7layer_bn2(input_ch, input_dim, width, linear_size)
 
 
 def cnn_7layer_bn_imagenet(input_ch=3, input_dim=64, width=64, linear_size=512):

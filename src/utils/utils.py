@@ -9,7 +9,7 @@ import hydra
 import pyrootutils
 from omegaconf import DictConfig
 from pytorch_lightning import Callback
-from pytorch_lightning.loggers import LightningLoggerBase
+from pytorch_lightning.loggers import Logger as LightningLoggerBase
 from pytorch_lightning.utilities import rank_zero_only
 
 root = pyrootutils.setup_root(

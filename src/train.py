@@ -8,7 +8,7 @@ import pyrootutils
 import pytorch_lightning as pl
 from omegaconf import DictConfig
 from pytorch_lightning import Callback, LightningDataModule, LightningModule, Trainer
-from pytorch_lightning.loggers import LightningLoggerBase
+from pytorch_lightning.loggers import Logger as LightningLoggerBase
 
 root = pyrootutils.setup_root(
     search_from=__file__,
@@ -18,6 +18,10 @@ root = pyrootutils.setup_root(
 )
 
 from src import utils  # noqa: E402
+
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="torchvision.datasets.mnist")
 
 log = utils.get_pylogger(__name__)
 
@@ -59,8 +63,10 @@ def train(cfg: DictConfig) -> Tuple[dict, dict]:
     )
 
     # DO TUNING HERE, e.g. automatically find learning rate and batch size
-    if trainer.auto_lr_find or trainer.auto_scale_batch_size:
-        trainer.tune(model=model, datamodule=datamodule)
+
+    # Harris: feature was removed from trainer in newer lightning versions
+    # if trainer.auto_lr_find or trainer.auto_scale_batch_size:
+    #     trainer.tune(model=model, datamodule=datamodule)
 
     object_dict = {
         "cfg": cfg,

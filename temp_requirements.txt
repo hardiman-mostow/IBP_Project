@@ -1,0 +1,26 @@
+# ------ installed by conda -- #
+
+
+# --------- hydra --------- #
+hydra-core==1.3.1
+hydra-colorlog==1.2.0
+
+# uncomment in case of using this sweeper
+# hydra-optuna-sweeper==1.2.0
+
+# --------- loggers --------- #
+# uncomment the necessary logger 
+# wandb
+# neptune-client
+# mlflow
+# comet-ml
+
+# --------- others --------- #
+rich            # beautiful text formatting in terminal
+pyrootutils     # standardizing the project root setup
+# pre-commit      # hooks for applying linters on commit
+# pytest          # tests
+# sh            # for running bash commands in some tests (linux/macos only)
+
+# --------- bound propagation --------- #
+auto-LiRPA

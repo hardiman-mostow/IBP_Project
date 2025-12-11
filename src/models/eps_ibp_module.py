@@ -21,7 +21,6 @@ from src.utils.scheduler import EpsScheduler  # noqa: E402
 
 log = utils.get_pylogger(__name__)
 
-
 class EpsIBP(BaseBoundedModulePL):
     """Model designed to certify robustness."""
 
@@ -56,6 +55,7 @@ class EpsIBP(BaseBoundedModulePL):
         reg_relu_weight: float = 0.5,
         kappa: float = 0.0,
         reg_clip_with_robust: bool = True,
+        c_label_smooth: float = 1.0
     ):
         super().__init__(
             net=net,
@@ -93,8 +93,8 @@ class EpsIBP(BaseBoundedModulePL):
         self.val_eps_best.reset()
         self.val_acceps_best.reset()
 
-        dataset_len = len(self.trainer.train_dataloader.loaders.dataset)
-        batch_size = self.trainer.train_dataloader.loaders.batch_size
+        dataset_len = len(self.trainer.train_dataloader.dataset)
+        batch_size = self.trainer.train_dataloader.batch_size
         epoch_length = int((dataset_len + batch_size - 1) / batch_size)
         self.eps_scheduler.set_epoch_length(epoch_length)
 
@@ -133,6 +133,14 @@ class EpsIBP(BaseBoundedModulePL):
                 ftol=ftol,
                 logits=logits,
             )
+        
+        # ADD THIS: Apply adaptive label smoothing
+        y_smoothed = self.adaptive_label_smooth(y, eps, c=self.hparams.c_label_smooth)
+
+        # print(" ")
+        # print("eps: ", eps)
+        # print("ysmooth shape:", y_smoothed.shape)
+        # print("y smooth: ", y_smoothed[0])
 
         loss_rob = torch.tensor(0.0).to(x.device)
         loss_tight = torch.tensor(0.0).to(x.device)
@@ -152,7 +160,13 @@ class EpsIBP(BaseBoundedModulePL):
                 eps = eps.clamp(min=self.hparams.min_eps_for_regularizers)
 
         lb = self.compute_lb(x, y, eps=eps)
-        loss_rob = self.robust_criterion(lb)
+
+        # MODIFY THIS: Use smoothed labels for robust loss
+        loss_rob = self.robust_criterion(lb, y_smoothed)  # Pass smoothed labels
+        # loss_rob = self.robust_criterion(lb)
+
+        # print("loss: ", loss_rob)
+        # print(" ")
 
         loss = torch.tensor(0.0).to(x.device)
         if reg:
@@ -231,24 +245,78 @@ class EpsIBP(BaseBoundedModulePL):
         # remember to always return loss from `training_step()` or backpropagation will fail!
         return {"loss": loss, "eps": eps}
 
-    def update_state_dict_with_bn(self):
-        bounded_state_dict = self.bounded_net.state_dict()
-        state_dict = self.net.state_dict()
-        keys = self.net.state_dict().keys()
-        for name in bounded_state_dict:
-            v = bounded_state_dict[name]
-            for prefix in ["model.", "/w.", "/b.", "/running_mean."]:
-                if name.startswith(prefix):
-                    name = name[len(prefix) :]
-                    break
-            if name not in keys:
-                raise KeyError(name)
-            # copy bounded_state_dict into state_dict because running_mean
-            # and running_var are computed differently
-            state_dict[name] = v
-        self.net.load_state_dict(state_dict)
+    # def update_state_dict_with_bn(self):
+    #     bounded_state_dict = self.bounded_net.state_dict()
+    #     state_dict = self.net.state_dict()
+    #     keys = self.net.state_dict().keys()
 
-    def training_epoch_end(self, outputs: List[Any]) -> None:
+    #     print(" ")
+    #     print("Bounded state dict keys:", list(bounded_state_dict.keys())[:10])  # First 10
+    #     print("Net state dict keys:", list(keys)[:10])  # First 10
+    #     print(" ")
+
+    #     for name in bounded_state_dict:
+    #         v = bounded_state_dict[name]
+    #         original_name = name
+    #         for prefix in ["model.", "/w.", "/b.", "/running_mean."]:
+    #             if name.startswith(prefix):
+    #                 name = name[len(prefix) :]
+    #                 break
+    #         if name not in keys:
+    #             print(" ")
+    #             print(f"Failed to find: original={original_name} -> stripped={name}")
+    #             print(" ")
+    #             raise KeyError(name)
+    #         # copy bounded_state_dict into state_dict because running_mean
+    #         # and running_var are computed differently
+    #         state_dict[name] = v
+    #     self.net.load_state_dict(state_dict)
+
+    def update_state_dict_with_bn(self):
+        pass
+    #     bounded_state_dict = self.bounded_net.state_dict()
+    #     state_dict = self.net.state_dict()
+    #     keys = self.net.state_dict().keys()
+        
+    #     for name in bounded_state_dict:
+    #         v = bounded_state_dict[name]
+    #         original_name = name
+            
+    #         # Handle new auto-lirpa format: /1.param -> 0.weight, /1-param -> 0.weight, etc.
+    #         if name.startswith("/"):
+    #             # Extract layer number and type
+    #             import re
+    #             match = re.match(r'/(\d+)[.-](param|buffer)', name)
+    #             if match:
+    #                 layer_num = int(match.group(1)) - 1  # /1 maps to layer 0
+    #                 param_type = match.group(2)
+                    
+    #                 # Map param to weight, buffer to bias/running_mean/etc
+    #                 if param_type == "param":
+    #                     name = f"{layer_num}.weight"
+    #                 elif param_type == "buffer":
+    #                     # Try different buffer types
+    #                     for suffix in ["bias", "running_mean", "running_var"]:
+    #                         candidate = f"{layer_num}.{suffix}"
+    #                         if candidate in keys:
+    #                             name = candidate
+    #                             break
+            
+    #         # Old prefixes (keep for backward compatibility)
+    #         for prefix in ["model.", "/w.", "/b.", "/running_mean."]:
+    #             if name.startswith(prefix):
+    #                 name = name[len(prefix):]
+    #                 break
+            
+    #         if name not in keys:
+    #             print(f"Failed mapping: {original_name} -> {name}")
+    #             print(f"Available keys: {list(keys)[:20]}")
+    #             raise KeyError(f"Cannot map {original_name} to any key in state_dict")
+                
+    #         state_dict[name] = v
+    #     self.net.load_state_dict(state_dict)
+
+    def on_train_epoch_end(self) -> None:
         # if batch_norm is used, need to update state dict specifically:
         self.update_state_dict_with_bn()
 
@@ -302,7 +370,7 @@ class EpsIBP(BaseBoundedModulePL):
 
         return {"loss": loss, "eps": eps.detach()}
 
-    def validation_epoch_end(self, outputs: List[Any]):
+    def on_validation_epoch_end(self):
         acc = self.val_acc.compute()  # get current val acc
         self.val_acc_best(acc)  # update best so far val acc
         # log `val_acc_best` as a value through `.compute()` method, instead of as a metric object

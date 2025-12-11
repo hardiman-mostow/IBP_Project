@@ -9,9 +9,9 @@ defaults:
 
 model:
   init_method: null
-  kappa: 0.0
+  kappa: 0
 
 # task name defines the output dir, e.g. "logs/${task_name}/runs/${now:date}"
 task_name: "eval/eps_ibp_mnist/kappa=${model.kappa}"
 
-ckpt_path: "logs/train/eps_ibp_mnist/checkpoints/kappa=${model.kappa}/best_acceps.ckpt"
+ckpt_path: "logs/train/eps_ibp_mnist/checkpoints/kappa=${model.kappa}/best_acceps-v1.ckpt"
